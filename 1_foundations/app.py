@@ -5,9 +5,24 @@ import os
 import requests
 from pypdf import PdfReader
 import gradio as gr
+from pydantic import BaseModel
 
 
 load_dotenv(override=True)
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+GEMINI_BASE_URL = os.getenv('GEMINI_BASE_URL')
+GEMINI_MODEL = os.getenv('GEMINI_MODEL')
+gemini = OpenAI(base_url=GEMINI_BASE_URL, api_key=GEMINI_API_KEY)
+
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+COHERE_MODEL = os.getenv("COHERE_MODEL")
+COHERE_BASE_URL = os.getenv("COHERE_BASE_URL")
+
+cohere = OpenAI(base_url=COHERE_BASE_URL, api_key=COHERE_API_KEY)
+
+class Evaluation(BaseModel):
+    is_acceptable: bool
+    feedback: str
 
 def push(text):
     requests.post(
@@ -76,8 +91,9 @@ tools = [{"type": "function", "function": record_user_details_json},
 class Me:
 
     def __init__(self):
-        self.openai = OpenAI()
-        self.name = "Ed Donner"
+        self.gemini = OpenAI(base_url=GEMINI_BASE_URL, api_key=GEMINI_API_KEY)
+        self.cohere = OpenAI(base_url=COHERE_BASE_URL, api_key=COHERE_API_KEY)
+        self.name = "Giuseppe"
         reader = PdfReader("me/linkedin.pdf")
         self.linkedin = ""
         for page in reader.pages:
@@ -111,12 +127,60 @@ If the user is engaging in discussion, try to steer them towards getting in touc
         system_prompt += f"\n\n## Summary:\n{self.summary}\n\n## LinkedIn Profile:\n{self.linkedin}\n\n"
         system_prompt += f"With this context, please chat with the user, always staying in character as {self.name}."
         return system_prompt
+    def evaluator_system_prompt(self):
+        evaluator_system_prompt = f"You are an evaluator that decides whether a response to a question is acceptable. \
+        You are provided with a conversation between a User and an Agent. Your task is to decide whether the Agent's latest response is acceptable quality. \
+        The Agent is playing the role of {self.name} and is representing {self.name} on their website. \
+        The Agent has been instructed to be professional and engaging, as if talking to a potential client or future employer who came across the website. \
+        The Agent has been provided with context on {self.name} in the form of their summary and LinkedIn details. Here's the information:"
+
+        evaluator_system_prompt += f"\n\n## Summary:\n{self.summary}\n\n## LinkedIn Profile:\n{self.linkedin}\n\n"
+        evaluator_system_prompt += f"With this context, please evaluate the latest response, replying with whether the response is acceptable and your feedback."
+
+        return evaluator_system_prompt
+
+    def evaluator_user_prompt(self, reply, message, history):
+        user_prompt = f"Here's the conversation between the User and the Agent: \n\n{history}\n\n"
+        user_prompt += f"Here's the latest message from the User: \n\n{message}\n\n"
+        user_prompt += f"Here's the latest response from the Agent: \n\n{reply}\n\n"
+        user_prompt += "Please evaluate the response, replying with whether it is acceptable and your feedback."
+        return user_prompt
+
+    def evaluate(self, reply, message, history) -> Evaluation:
+        messages = [{"role": "system", "content": self.evaluator_system_prompt()}] + [{"role": "user", "content": self.evaluator_user_prompt(reply, message, history)}]
+        response = cohere.beta.chat.completions.parse(model=COHERE_MODEL, messages=messages, response_format=Evaluation)
+        return response.choices[0].message.parsed
+
+    def rerun(self, reply, message, history, feedback):
+    # updated_system_prompt = system_prompt + "\n\n## Previous answer rejected\nYou just tried to reply, but the quality control rejected your reply\n"
+    # updated_system_prompt += f"## Your attempted answer:\n{reply}\n\n"
+    # updated_system_prompt += f"## Reason for rejection:\n{feedback}\n\n"
+    # messages = [{"role": "system", "content": updated_system_prompt}] + history + [{"role": "user", "content": message}]
+    # response = openai.chat.completions.create(model="gpt-4o-mini", messages=messages)
+    # return response.choices[0].message.content
+
+        updated_system_prompt = self.system_prompt() + "\n\n## Previous answer rejected\nYou just tried to reply, but the quality control rejected your reply\n"
+        updated_system_prompt += f"## Your attempted answer: \n{reply}\n\n"
+        updated_system_prompt += f"## Reason for rejection:\n{feedback}\n\n"
+        messages = [{"role": "system", "content": updated_system_prompt}] + history + [{"role": "user", "content": message}]
+        response = gemini.chat.completions.create(model=GEMINI_MODEL, messages=messages, tools=tools)
+        return response
     
     def chat(self, message, history):
         messages = [{"role": "system", "content": self.system_prompt()}] + history + [{"role": "user", "content": message}]
         done = False
         while not done:
-            response = self.openai.chat.completions.create(model="gpt-4o-mini", messages=messages, tools=tools)
+            response = self.gemini.chat.completions.create(model=GEMINI_MODEL, messages=messages, tools=tools)
+            reply = response.choices[0].message.content
+            evaluation = self.evaluate(reply, message, history)
+            if evaluation.is_acceptable:
+                print("Passed evaluation - returning reply")
+            else:
+                print("Failed evaluation - retrying")
+                print(evaluation.feedback)
+                print(reply)
+                response = self.rerun(reply, message, history, evaluation.feedback)
+              
             if response.choices[0].finish_reason=="tool_calls":
                 message = response.choices[0].message
                 tool_calls = message.tool_calls
@@ -125,6 +189,7 @@ If the user is engaging in discussion, try to steer them towards getting in touc
                 messages.extend(results)
             else:
                 done = True
+            
         return response.choices[0].message.content
     
 
