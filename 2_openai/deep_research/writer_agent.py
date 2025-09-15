@@ -1,5 +1,14 @@
 from pydantic import BaseModel, Field
-from agents import Agent
+from agents import Agent, OpenAIChatCompletionsModel
+import os
+from openai import AsyncOpenAI
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL")
+
+gemini_client = AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
+gemini_model = OpenAIChatCompletionsModel(model=GEMINI_MODEL, openai_client=gemini_client)
 
 INSTRUCTIONS = (
     "You are a senior researcher tasked with writing a cohesive report for a research query. "
@@ -20,8 +29,8 @@ class ReportData(BaseModel):
 
 
 writer_agent = Agent(
-    name="WriterAgent",
+    name="WriterAgentGemini",
     instructions=INSTRUCTIONS,
-    model="gpt-4o-mini",
+    model=gemini_model,
     output_type=ReportData,
 )
