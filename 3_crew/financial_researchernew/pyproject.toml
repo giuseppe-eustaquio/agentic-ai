@@ -1,0 +1,23 @@
+[project]
+name = "financial_researchernew"
+version = "0.1.0"
+description = "financial_researchernew using crewAI"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "crewai[tools]>=0.186.1,<1.0.0"
+]
+
+[project.scripts]
+financial_researchernew = "financial_researchernew.main:run"
+run_crew = "financial_researchernew.main:run"
+train = "financial_researchernew.main:train"
+replay = "financial_researchernew.main:replay"
+test = "financial_researchernew.main:test"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "crew"
