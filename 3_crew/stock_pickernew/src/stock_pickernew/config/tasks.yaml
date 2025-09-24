@@ -1,0 +1,37 @@
+find_trending_companies:
+  description: >
+    Find the top trending companies in the news in {sector} by searching the latest news. Find new companes that you've not found before.
+  expected_output: >
+    A list of trending companies in {sector}
+  agent: trending_company_finder
+  output_file: output/trending_companies.json
+
+research_trending_companies:
+  description: >
+    Given a list of trending companies, provide detailed analysis of each company in a report by searching online
+  expected_output: >
+    A report containing detailed analysis of each company
+  agent: financial_researcher
+  context:
+    - find_trending_companies
+  output_file: output/research_report.json
+
+pick_best_company:
+  description: >
+    MANDATORY STEPS - COMPLETE IN EXACT ORDER:
+    STEP 1: Analyze research and pick the best company
+    STEP 2: Use the "Send a Push Notification" tool - you MUST get back a "unique_confirmation" field
+    STEP 3: Include the exact unique_confirmation from the tool in your response
+    STEP 4: Write your detailed report
+    
+    Your response MUST include the actual unique_confirmation field from the tool output.
+    If you do not have a unique_confirmation starting with "REAL_TOOL_EXECUTION_", you have failed.
+  expected_output: >
+    1. The exact unique_confirmation code from the push notification tool
+    2. Detailed analysis of your choice and rejected companies
+    
+    Example format: "Tool confirmation: REAL_TOOL_EXECUTION_1234567890_5678"
+  agent: stock_picker
+  context:
+    - research_trending_companies
+  output_file: output/decisions.md

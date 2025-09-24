@@ -7,7 +7,7 @@ import requests
 
 class PushNotification(BaseModel):
     """A message to be sent to the user"""
-    message: str = Field(..., description="The message to be sent to the user.")
+    message: str = Field( description="The message to be sent to the user.")
 
 class PushNotificationTool(BaseTool):
     name: str = "Send a Push Notification"
@@ -25,3 +25,4 @@ class PushNotificationTool(BaseTool):
         payload = {"user": pushover_user, "token": pushover_token, "message": message}
         requests.post(pushover_url, data=payload)
         return '{"notification": "ok"}'
+    
